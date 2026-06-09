@@ -1,0 +1,33 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Employee {
+  id             Int          @id @default(autoincrement())
+  name           String
+  baseSalary     Float
+  attendBonus    Float        @default(500000)   // PC chuyên cần
+  bhxhDeduct     Float        @default(0)        // Tiền đóng BHXH tự nhập
+  lunchAllowance Float        @default(50000)    // PC ăn trưa/ngày
+  allowance      Float        @default(0)        // Phụ cấp khác
+  petrolAllowance Float       @default(0)        // Phụ cấp xăng
+  createdAt      DateTime     @default(now())
+  attendances    Attendance[]
+}
+
+model Attendance {
+  id         Int      @id @default(autoincrement())
+  employeeId Int
+  date       DateTime
+  status     String   // 'X' | '0' | 'P' | 'OT'
+  checkIn    String?  // e.g. '09:00'
+  otHours    Float    @default(0)
+  note       String?
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  @@unique([employeeId, date])
+}

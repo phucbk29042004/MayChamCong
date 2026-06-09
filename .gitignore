@@ -1,0 +1,14 @@
+# Bỏ qua các thư mục cài đặt thư viện
+node_modules/
+frontend/node_modules/
+
+# Bỏ qua bộ nhớ cache của Vite
+.vite/
+frontend/.vite/
+
+# Bỏ qua thư mục build khi đóng gói (khuyên dùng)
+dist/
+frontend/dist/
+
+# Bỏ qua các file cấu hình bảo mật
+.env*.local
