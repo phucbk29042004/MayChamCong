@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: maychamcong
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: PORT
+        value: 3001
+    healthCheckPath: /health

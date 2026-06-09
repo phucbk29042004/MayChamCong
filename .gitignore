@@ -1,14 +1,19 @@
-# Bỏ qua các thư mục cài đặt thư viện
 node_modules/
 frontend/node_modules/
+backend/node_modules/
 
-# Bỏ qua bộ nhớ cache của Vite
 .vite/
 frontend/.vite/
 
-# Bỏ qua thư mục build khi đóng gói (khuyên dùng)
 dist/
 frontend/dist/
 
-# Bỏ qua các file cấu hình bảo mật
+# Bảo vệ file môi trường — KHÔNG đẩy lên GitHub
+.env
+.env.local
 .env*.local
+backend/.env
+
+# SQLite database — không cần thiết khi dùng PostgreSQL
+backend/prisma/dev.db
+backend/prisma/*.db-journal

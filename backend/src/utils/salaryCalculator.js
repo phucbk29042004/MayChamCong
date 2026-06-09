@@ -1,18 +1,13 @@
 /**
  * Helper to calculate standard work days (total days in month excluding Sundays)
- * and count of Sundays.
- * @param {number} year 
- * @param {number} month (1-indexed, e.g. 1 for January)
- * @returns {{totalDays: number, sundays: number, standardDays: number}}
+ * @param {number} year
+ * @param {number} month (1-indexed)
  */
 export function getMonthDaysInfo(year, month) {
   const totalDays = new Date(year, month, 0).getDate();
   let sundays = 0;
   for (let day = 1; day <= totalDays; day++) {
-    const date = new Date(year, month - 1, day);
-    if (date.getDay() === 0) {
-      sundays++;
-    }
+    if (new Date(year, month - 1, day).getDay() === 0) sundays++;
   }
   const standardDays = totalDays - sundays;
   return { totalDays, sundays, standardDays };
@@ -20,70 +15,60 @@ export function getMonthDaysInfo(year, month) {
 
 /**
  * Calculates salary for an employee based on their attendance list in a specific month.
- * @param {Object} employee - Employee object from db (name, baseSalary, attendBonus, bhxhRate, lunchAllowance, etc.)
- * @param {Array} attendances - List of attendance records for the employee in this month
- * @param {number} year
- * @param {number} month
  */
 export function calculateSalary(employee, attendances, year, month) {
   const { standardDays } = getMonthDaysInfo(year, month);
-  
-  // dayRate = baseSalary / standardDays
+
   const dayRate = employee.baseSalary / standardDays;
-  
-  // Counts of statuses on weekdays (excluding Sundays)
-  const absentDays = attendances.filter(att => 
-    att.status === '0' && 
-    new Date(att.date).getDay() !== 0
-  ).length;
-  const leaveDays = attendances.filter(att => 
-    att.status === 'P' && 
-    new Date(att.date).getDay() !== 0
-  ).length;
-  const halfDays = attendances.filter(att => 
-    att.status === '1/2' && 
-    new Date(att.date).getDay() !== 0
-  ).length;
-  
-  // Late: after 09:05, with 3 free passes per month before deduction
+
+  // Count statuses on weekdays only (exclude Sundays)
+  const isWeekday = (att) => new Date(att.date).getDay() !== 0;
+
+  const absentDays = attendances.filter(att => att.status === '0' && isWeekday(att)).length;
+  const leaveDays  = attendances.filter(att => att.status === 'P' && isWeekday(att)).length;
+  const halfDays   = attendances.filter(att => att.status === '1/2' && isWeekday(att)).length;
+  const otDays     = attendances.filter(att => att.status === 'OT').length;
+
+  // Late: only X and OT count — 1/2 ngày KHÔNG tính trễ
   const LATE_THRESHOLD = '09:05';
   const FREE_LATE_PASSES = 3;
 
   const lateDaysCount = attendances.filter(att =>
-    (att.status === 'X' || att.status === 'OT' || att.status === '1/2') &&
+    (att.status === 'X' || att.status === 'OT') &&
     att.checkIn &&
     att.checkIn > LATE_THRESHOLD
   ).length;
 
-  // Only deduct salary for late days exceeding the 3 free passes
   const unpaidLateDays = Math.max(0, lateDaysCount - FREE_LATE_PASSES);
 
-  // Ngày công (Ngày buổi) = standardDays - vắng - đi trễ không lương - (nửa ngày * 0.5)
-  // Note: phép is paid so we don't subtract it from Ngày công.
-  const displayDays = Math.max(0, standardDays - absentDays - unpaidLateDays - (halfDays * 0.5));
+  // Ngày công thực tính lương:
+  // = standardDays - vắng - trừ trễ - (nửa ngày × 0.5)
+  // Nghỉ phép (P) KHÔNG bị trừ — vẫn được hưởng lương cơ bản
+  const paidDays = Math.max(0, standardDays - absentDays - unpaidLateDays - (halfDays * 0.5));
 
-  // basePay = dayRate * Ngày công
-  const basePay = dayRate * displayDays;
-  
-  // Phụ cấp cơm trưa is now flat monthly amount manually input
-  const lunchPay = employee.lunchAllowance || 0;
-  
-  // otDays = number of days status = 'OT'
-  const otDays = attendances.filter(att => att.status === 'OT').length;
-  // otPay = otDays * dayRate * 1.5
+  const basePay = dayRate * paidDays;
+
+  // OT pay = số ngày OT × dayRate × 1.5
   const otPay = otDays * dayRate * 1.5;
-  
-  // totalIncome = basePay + lunchPay + otPay + allowance + petrolAllowance
-  const allowance = employee.allowance || 0;
+
+  // Phụ cấp cơm trưa: chỉ tính ngày thực đi làm (X + OT + 1/2), KHÔNG tính ngày phép
+  // lunchAllowance là mức/ngày → tính theo số ngày đi thực tế
+  const workDaysActual = attendances.filter(att =>
+    (att.status === 'X' || att.status === 'OT' || att.status === '1/2') && isWeekday(att)
+  ).length;
+  const lunchPay = (employee.lunchAllowance || 0) * workDaysActual;
+
+  const allowance       = employee.allowance || 0;
   const petrolAllowance = employee.petrolAllowance || 0;
+
   const totalIncome = basePay + lunchPay + otPay + allowance + petrolAllowance;
-  
-  // bhxhDeduct = flat deduction amount directly from employee (tự nhập)
+
   const bhxhDeduct = employee.bhxhDeduct || 0;
-  
-  // netSalary = totalIncome - bhxhDeduct
-  const netSalary = Math.max(0, totalIncome - bhxhDeduct);
-  
+  const netSalary  = Math.max(0, totalIncome - bhxhDeduct);
+
+  // workDays hiển thị = paidDays (bao gồm cả ngày phép đã được tính lương)
+  const displayWorkDays = paidDays + leaveDays;
+
   return {
     employeeId: employee.id,
     name: employee.name,
@@ -94,19 +79,18 @@ export function calculateSalary(employee, attendances, year, month) {
     petrolAllowance,
     standardDays,
     dayRate,
-    workDays: displayDays, // Display Ngày buổi
+    workDays: displayWorkDays,
     absentDays,
     leaveDays,
     halfDays,
     otDays,
     lateDaysCount,
-    unpaidLateDays, // For display
+    unpaidLateDays,
     basePay,
-    attendBonus: 0, // Removed chuyên cần
+    attendBonus: 0,
     lunchPay,
     otPay,
     totalIncome,
-    netSalary
+    netSalary,
   };
 }
-
